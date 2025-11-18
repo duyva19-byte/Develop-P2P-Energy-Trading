@@ -1,0 +1,239 @@
+/* =========================================================
+ * 1. Database creation
+ * =======================================================*/
+
+CREATE DATABASE IF NOT EXISTS p2p_energy_trading
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE p2p_energy_trading;
+
+
+/* =========================================================
+ * 2. Table definitions
+ * =======================================================*/
+
+-- Participant master data
+CREATE TABLE IF NOT EXISTS User (
+    UserID      VARCHAR(255) NOT NULL,
+    UserName    VARCHAR(255) NOT NULL,
+    UserAddress VARCHAR(255) NOT NULL,
+    Postcode    VARCHAR(255) NOT NULL,
+    UserEmail   VARCHAR(255) NOT NULL,
+    UserPhone   VARCHAR(255) NOT NULL,
+    Longitude   FLOAT NOT NULL,
+    Latitude    FLOAT NOT NULL,
+    PRIMARY KEY (UserID)
+);
+
+-- Energy type reference data
+CREATE TABLE IF NOT EXISTS EnergyType (
+    EnergyTypeID   INT NOT NULL,
+    EnergyCode     VARCHAR(20) NOT NULL,
+    EnergyDesc     VARCHAR(255) NOT NULL,
+    PRIMARY KEY (EnergyTypeID)
+);
+
+-- Trading preferences for each participant
+CREATE TABLE IF NOT EXISTS ParticipantPreference (
+    PreferenceID       INT AUTO_INCREMENT,
+    UserID             VARCHAR(255) NOT NULL,
+    PricePreference    SMALLINT NOT NULL,   -- 0–100
+    DistancePreference SMALLINT NOT NULL,   -- 0–100
+    PRIMARY KEY (PreferenceID),
+    CONSTRAINT fk_pref_user
+        FOREIGN KEY (UserID)
+        REFERENCES User (UserID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+-- Buy/Sell orders submitted to the market
+CREATE TABLE IF NOT EXISTS TradeRequest (
+    RequestID     INT AUTO_INCREMENT,
+    UserID        VARCHAR(255) NOT NULL,
+    ReqType       ENUM('BUY', 'SELL') NOT NULL,
+    Period        INT NOT NULL,                -- e.g. 20241107 (yyyymmdd)
+    EnergyTypeID  INT NOT NULL,
+    QuantityKWh   DECIMAL(10,2) NOT NULL,
+    MaxPrice      DECIMAL(10,2) NULL,          -- for BUY: maximum acceptable price
+    MinPrice      DECIMAL(10,2) NULL,          -- for SELL: minimum acceptable price
+    CreatedAt     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (RequestID),
+    CONSTRAINT fk_req_user
+        FOREIGN KEY (UserID)
+        REFERENCES User (UserID),
+    CONSTRAINT fk_req_energy
+        FOREIGN KEY (EnergyTypeID)
+        REFERENCES EnergyType (EnergyTypeID)
+);
+
+-- Executed trades after the ETA matching process
+CREATE TABLE IF NOT EXISTS TradeTransaction (
+    TradeID          INT AUTO_INCREMENT,
+    SellerRequestID  INT NOT NULL,
+    BuyerRequestID   INT NOT NULL,
+    Period           INT NOT NULL,
+    EnergyTypeID     INT NOT NULL,
+    QuantityKWh      DECIMAL(10,2) NOT NULL,
+    TradePrice       DECIMAL(10,2) NOT NULL,
+    CreatedAt        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (TradeID),
+    CONSTRAINT fk_trade_seller
+        FOREIGN KEY (SellerRequestID)
+        REFERENCES TradeRequest (RequestID),
+    CONSTRAINT fk_trade_buyer
+        FOREIGN KEY (BuyerRequestID)
+        REFERENCES TradeRequest (RequestID),
+    CONSTRAINT fk_trade_energy
+        FOREIGN KEY (EnergyTypeID)
+        REFERENCES EnergyType (EnergyTypeID)
+);
+
+
+/* =========================================================
+ * 3. Seed data
+ * =======================================================*/
+
+-- 3.1. Insert reference energy types
+INSERT INTO EnergyType (EnergyTypeID, EnergyCode, EnergyDesc) VALUES
+    (1, 'PV',  'Solar Energy'),
+    (2, 'WND', 'Wind Energy'),
+    (3, 'BIO', 'Biomass Energy');
+
+
+-- 3.2. Generate 100 random users
+INSERT INTO User (UserID, UserName, UserAddress, Postcode, UserEmail, UserPhone, Longitude, Latitude)
+SELECT
+    CONCAT('U', LPAD(id, 3, '0')) AS UserID,
+    CONCAT('User ', id)          AS UserName,
+    CONCAT('Address ', id, ' Some Street') AS UserAddress,
+    CONCAT('BS', LPAD(FLOOR(RAND() * 90) + 10, 2, '0'), 'UB') AS Postcode,
+    CONCAT('user', id, '@example.com') AS UserEmail,
+    CONCAT('+4407', LPAD(FLOOR(RAND() * 100000000), 8, '0'))  AS UserPhone,
+    -3.0 + RAND() * 2.0  AS Longitude,   -- range approx. [-3, -1]
+    50.0 + RAND() * 2.0  AS Latitude     -- range approx. [50, 52]
+FROM (
+    SELECT (@row := @row + 1) AS id
+    FROM
+        (SELECT 0 FROM information_schema.columns LIMIT 100) x,
+        (SELECT @row := 0) r
+) tmp
+LIMIT 100;
+
+
+-- 3.3. Random trading preferences for each user
+INSERT INTO ParticipantPreference (UserID, PricePreference, DistancePreference)
+SELECT 
+    UserID,
+    FLOOR(RAND() * 100) AS PricePreference,       -- 0–99
+    FLOOR(RAND() * 100) AS DistancePreference
+FROM User;
+
+
+/* =========================================================
+ * 4. Generate sample BUY/SELL requests
+ * =======================================================*/
+
+-- 4.1. 50 SELL requests, same period and energy type (PV)
+INSERT INTO TradeRequest (UserID, ReqType, Period, EnergyTypeID, QuantityKWh, MinPrice, MaxPrice)
+SELECT
+    u.UserID,
+    'SELL',
+    20241107           AS Period,
+    1                  AS EnergyTypeID,          -- all PV for easier matching
+    10 + RAND() * 10   AS QuantityKWh,           -- 10–20 kWh
+    0.10               AS MinPrice,              -- fixed minimum price
+    NULL               AS MaxPrice
+FROM User u
+ORDER BY RAND()
+LIMIT 50;
+
+-- 4.2. 50 BUY requests, same period and energy type (PV)
+INSERT INTO TradeRequest (UserID, ReqType, Period, EnergyTypeID, QuantityKWh, MinPrice, MaxPrice)
+SELECT
+    u.UserID,
+    'BUY',
+    20241107           AS Period,
+    1                  AS EnergyTypeID,
+    10 + RAND() * 10   AS QuantityKWh,           -- 10–20 kWh
+    NULL               AS MinPrice,
+    0.30               AS MaxPrice               -- fixed maximum price
+FROM User u
+ORDER BY RAND()
+LIMIT 50;
+
+
+/* =========================================================
+ * 5. Simple ETA-style matching (mock)
+ *    Match BUY and SELL orders by period and energy type,
+ *    with SELL.MinPrice <= BUY.MaxPrice
+ * =======================================================*/
+
+INSERT INTO TradeTransaction (
+    SellerRequestID,
+    BuyerRequestID,
+    Period,
+    EnergyTypeID,
+    QuantityKWh,
+    TradePrice
+)
+SELECT
+    s.RequestID AS SellerRequestID,
+    b.RequestID AS BuyerRequestID,
+    s.Period,
+    s.EnergyTypeID,
+    LEAST(s.QuantityKWh, b.QuantityKWh) AS QuantityKWh,
+    (s.MinPrice + b.MaxPrice) / 2       AS TradePrice
+FROM TradeRequest s
+JOIN TradeRequest b
+  ON s.Period       = b.Period
+ AND s.EnergyTypeID = b.EnergyTypeID
+WHERE s.ReqType = 'SELL'
+  AND b.ReqType = 'BUY'
+  AND s.MinPrice IS NOT NULL
+  AND b.MaxPrice IS NOT NULL
+  AND s.MinPrice <= b.MaxPrice
+LIMIT 50;
+
+
+/* =========================================================
+ * 6. Validation queries (optional)
+ * =======================================================*/
+
+SELECT *
+FROM TradeRequest
+WHERE RequestID IN (101, 131);
+
+SELECT s.RequestID AS SellerReq,
+       b.RequestID AS BuyerReq,
+       s.UserID    AS SellerId,
+       b.UserID    AS BuyerId,
+       s.QuantityKWh,
+       s.MinPrice,
+       b.MaxPrice
+FROM TradeRequest s
+JOIN TradeRequest b
+  ON s.EnergyTypeID = b.EnergyTypeID
+WHERE s.RequestID = 101    -- SELL
+  AND b.RequestID = 131    -- BUY
+  AND s.MinPrice <= b.MaxPrice;
+  
+  INSERT INTO TradeTransaction (
+    SellerRequestID,
+    BuyerRequestID,
+    Period,
+    EnergyTypeID,
+    QuantityKWh,
+    TradePrice
+)
+VALUES (
+    101,
+    131,
+    20241107,
+    1,
+    12.0,
+    0.18
+);
+
+select * from TradeTransaction order by tradeID desc
