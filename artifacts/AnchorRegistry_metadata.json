@@ -1,0 +1,106 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "bytes32",
+						"name": "recordHash",
+						"type": "bytes32"
+					},
+					{
+						"indexed": true,
+						"internalType": "bytes32",
+						"name": "recordId",
+						"type": "bytes32"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "owner",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "meta",
+						"type": "string"
+					}
+				],
+				"name": "Anchored",
+				"type": "event"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "bytes32",
+						"name": "recordHash",
+						"type": "bytes32"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "recordId",
+						"type": "bytes32"
+					},
+					{
+						"internalType": "string",
+						"name": "meta",
+						"type": "string"
+					}
+				],
+				"name": "anchor",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/AnchorRegistry.sol": "AnchorRegistry"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/AnchorRegistry.sol": {
+			"keccak256": "0x0490d04c20e992e412f54b1c5c58429214913f45f5b04f3299b0cf887397e98a",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://1e96ebe22a55bdee6ff93508d1526ac080469162f8c9e12cf0bbb07d7341c5b5",
+				"dweb:/ipfs/QmYB37CqkocDh6J1g2iGryXms1o1BYuTRgoYxuuMAGeyDD"
+			]
+		}
+	},
+	"version": 1
+}
