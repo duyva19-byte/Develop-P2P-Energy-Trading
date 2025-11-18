@@ -89,7 +89,7 @@
 	},
 	"settings": {
 		"compilationTarget": {
-			"contracts/EnergyTrading.sol": "EnergyTrading"
+			"Hybrid Database/EnergyTrading.sol": "EnergyTrading"
 		},
 		"evmVersion": "prague",
 		"libraries": {},
@@ -103,7 +103,7 @@
 		"remappings": []
 	},
 	"sources": {
-		"contracts/EnergyTrading.sol": {
+		"Hybrid Database/EnergyTrading.sol": {
 			"keccak256": "0x25a18bada61de2f05e524c2d63176c264ed09f2f6497b5bb19c7840a499da862",
 			"license": "MIT",
 			"urls": [
